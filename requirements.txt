@@ -19,3 +19,4 @@ toml==0.10.0
 urllib3==2.2.2
 user_agent
 python-dotenv==1.0.0
+boto3==1.35.0

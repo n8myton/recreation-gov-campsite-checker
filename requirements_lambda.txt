@@ -1,0 +1,17 @@
+appdirs==1.4.3
+attrs==18.2.0
+certifi==2018.11.29
+chardet==3.0.4
+fake-useragent==0.1.11
+future==0.17.1
+idna==2.8
+oauthlib==3.0.1
+python-dateutil==2.8.1
+requests==2.32.3
+requests-oauthlib==1.2.0
+six==1.16.0
+soupsieve==1.8
+urllib3==2.2.2
+user_agent
+# Note: boto3 is already available in Lambda runtime, no need to package it
+# Note: python-dotenv not needed in Lambda (only for local testing)
