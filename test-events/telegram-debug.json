@@ -1,0 +1,3 @@
+{
+  "body": "{\"message\":{\"message_id\":5,\"from\":{\"id\":8245520634,\"is_bot\":false,\"first_name\":\"Test\",\"username\":\"testuser\"},\"chat\":{\"id\":8245520634,\"first_name\":\"Test\",\"username\":\"testuser\",\"type\":\"private\"},\"date\":1697875200,\"text\":\"/debug_modules\"}}"
+}
