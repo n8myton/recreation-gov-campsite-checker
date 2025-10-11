@@ -8,7 +8,7 @@
   "searches": [
     {
       "name": "Yosemite Valley 4th of July Weekend",
-      "enabled": true,
+      "enabled": false,
       "parks": ["232448"],
       "start_date": "2025-07-04",
       "end_date": "2025-07-06",
@@ -22,8 +22,8 @@
       "name": "Joshua Tree October",
       "enabled": true,
       "parks": ["232472"],
-      "start_date": "2025-10-14",
-      "end_date": "2025-10-16",
+      "start_date": "2025-10-11",
+      "end_date": "2025-10-12",
       "campsite_type": null,
       "campsite_ids": [],
       "nights": 2,
@@ -32,7 +32,7 @@
     },
     {
       "name": "Multiple Parks Labor Day",
-      "enabled": true,
+      "enabled": false,
       "parks": ["232448", "232449", "232472"],
       "start_date": "2025-09-01",
       "end_date": "2025-09-03",
