@@ -1,0 +1,13 @@
+{
+  "version": "0",
+  "id": "12345678-1234-1234-1234-123456789012",
+  "detail-type": "Scheduled Event",
+  "source": "aws.events",
+  "account": "123456789012",
+  "time": "2025-10-11T20:00:00Z",
+  "region": "us-west-1",
+  "resources": [
+    "arn:aws:events:us-west-1:123456789012:rule/campsite-monitoring-schedule"
+  ],
+  "detail": {}
+}

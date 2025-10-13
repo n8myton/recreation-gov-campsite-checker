@@ -1,0 +1,58 @@
+{
+  "version": "1.0",
+  "description": "Campsite monitoring configuration",
+  "notification_settings": {
+    "only_notify_on_availability": true,
+    "include_search_name_in_notification": true
+  },
+  "searches": [
+    {
+      "name": "Yosemite Valley 4th of July Weekend",
+      "enabled": false,
+      "parks": ["232448"],
+      "start_date": "2025-07-04",
+      "end_date": "2025-07-06",
+      "campsite_type": null,
+      "campsite_ids": [],
+      "nights": 2,
+      "weekends_only": false,
+      "priority": "high"
+    },
+    {
+      "name": "Joshua Tree October",
+      "enabled": true,
+      "parks": ["232472"],
+      "start_date": "2025-10-11",
+      "end_date": "2025-10-12",
+      "campsite_type": null,
+      "campsite_ids": [],
+      "nights": 2,
+      "weekends_only": false,
+      "priority": "normal"
+    },
+    {
+      "name": "Multiple Parks Labor Day",
+      "enabled": false,
+      "parks": ["232448", "232449", "232472"],
+      "start_date": "2025-09-01",
+      "end_date": "2025-09-03",
+      "campsite_type": "STANDARD NONELECTRIC",
+      "campsite_ids": [],
+      "nights": 2,
+      "weekends_only": false,
+      "priority": "high"
+    },
+    {
+      "name": "Disabled Search Example",
+      "enabled": false,
+      "parks": ["232450"],
+      "start_date": "2025-08-15",
+      "end_date": "2025-08-17",
+      "campsite_type": null,
+      "campsite_ids": [],
+      "nights": 2,
+      "weekends_only": false,
+      "priority": "normal"
+    }
+  ]
+}

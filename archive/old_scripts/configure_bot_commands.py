@@ -50,6 +50,10 @@ def set_bot_commands():
             "description": "🗑️ Remove a search"
         },
         {
+            "command": "deleteall",
+            "description": "🗑️💥 Remove all searches (reset)"
+        },
+        {
             "command": "check",
             "description": "🔍 Manually check all searches now"
         },

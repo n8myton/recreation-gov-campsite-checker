@@ -1,0 +1,24 @@
+# Campsite Checker Lambda Requirements
+# All dependencies needed for camping functionality
+
+# Core camping dependencies
+python-dateutil>=2.8.2
+requests>=2.31.0
+pytz>=2023.3
+user-agent>=0.1.10
+fake-useragent>=1.4.0
+
+# OAuth and authentication
+oauthlib>=3.2.2
+requests-oauthlib>=1.3.1
+
+# HTML parsing and data processing
+beautifulsoup4>=4.12.2
+soupsieve>=2.5
+
+# Utilities
+attrs>=23.1.0
+charset-normalizer>=3.3.0
+
+# For local development/testing
+python-dotenv>=1.0.0

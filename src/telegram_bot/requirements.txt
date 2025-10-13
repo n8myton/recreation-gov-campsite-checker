@@ -1,0 +1,5 @@
+# Telegram Bot Lambda Requirements
+# Minimal dependencies - boto3 is included in Lambda runtime
+
+# Only needed for local development/testing
+python-dotenv>=1.0.0
