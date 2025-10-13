@@ -11,6 +11,7 @@ import urllib.parse
 import os
 import boto3
 from datetime import datetime, timedelta
+import re
 
 # Load environment variables when running locally (only import dotenv if available)
 try:
@@ -89,6 +90,24 @@ def load_user_config(bucket_name, user_id):
         print(f"Error loading user config for {user_id}: {e}")
         return None
 
+def save_user_config(bucket_name, user_id, config):
+    """Save user-specific search configuration to S3"""
+    s3 = boto3.client('s3')
+    config_key = f"users/telegram_{user_id}.json"
+    
+    try:
+        config_content = json.dumps(config, indent=2)
+        s3.put_object(
+            Bucket=bucket_name,
+            Key=config_key,
+            Body=config_content.encode('utf-8'),
+            ContentType='application/json'
+        )
+        return True
+    except Exception as e:
+        print(f"Error saving user config for {user_id}: {e}")
+        return False
+
 def get_all_user_configs(bucket_name):
     """Get all user configurations for scheduled monitoring"""
     s3 = boto3.client('s3')
@@ -166,6 +185,90 @@ def format_campsite_availability_message(camping_output, has_availabilities, sea
     
     return None, None, 0  # Don't notify if no specific availability found
 
+def extract_site_count_from_output(camping_output):
+    """Extract the total number of available sites from camping output"""
+    if not camping_output:
+        return 0
+    
+    total_sites = 0
+    SUCCESS_EMOJI = "🏕"
+    
+    lines = camping_output.strip().split('\n')
+    for line in lines:
+        if SUCCESS_EMOJI in line and ":" in line:
+            # Extract availability count from lines like "🏕 Park Name: 3 sites available"
+            parts = line.split(":")
+            if len(parts) >= 2:
+                available_part = parts[1].strip()
+                # Extract number from strings like "3 sites available" or "3 site(s) available"
+                match = re.search(r'(\d+)\s+site', available_part, re.IGNORECASE)
+                if match:
+                    total_sites += int(match.group(1))
+    
+    return total_sites
+
+def should_notify_availability_change(result, last_state):
+    """
+    Determine if we should notify based on availability state changes
+    Returns: (should_notify, reason, new_state)
+    """
+    current_has_sites = result.get('has_availabilities', False)
+    current_count = 0
+    
+    if current_has_sites:
+        current_count = extract_site_count_from_output(result.get('camping_output', ''))
+    
+    # Create current state
+    current_state = {
+        'has_sites': current_has_sites,
+        'site_count': current_count,
+        'last_checked': datetime.now().isoformat()
+    }
+    
+    # If no previous state, notify if we have availability
+    if not last_state:
+        if current_has_sites:
+            return True, "first_availability_found", current_state
+        else:
+            return False, "no_availability", current_state
+    
+    previous_has_sites = last_state.get('has_sites', False)
+    previous_count = last_state.get('site_count', 0)
+    
+    # Case 1: New availability (none → some)
+    if current_has_sites and not previous_has_sites:
+        return True, "new_availability", current_state
+    
+    # Case 2: Availability disappeared (some → none) - don't notify for this
+    if not current_has_sites and previous_has_sites:
+        return False, "availability_disappeared", current_state
+    
+    # Case 3: Both have availability - check for significant increases
+    if current_has_sites and previous_has_sites:
+        # Notify if availability doubled or increased by at least 3 sites
+        if (current_count >= previous_count * 2 and current_count > previous_count + 2) or \
+           (current_count >= previous_count + 5):
+            return True, "significant_increase", current_state
+        else:
+            return False, "availability_unchanged", current_state
+    
+    # Case 4: No availability in either state
+    return False, "no_availability", current_state
+
+def update_search_availability_state(bucket_name, user_id, search_name, new_state):
+    """Update the availability state for a specific search"""
+    config = load_user_config(bucket_name, user_id)
+    if not config:
+        return False
+    
+    # Find the search and update its state
+    for search in config.get('searches', []):
+        if search['name'] == search_name:
+            search['last_availability_state'] = new_state
+            break
+    
+    return save_user_config(bucket_name, user_id, config)
+
 def process_search(search_config):
     """Process a single search configuration"""
     if not search_config.get('enabled', True):
@@ -218,31 +321,57 @@ def process_search(search_config):
             'has_availabilities': False
         }
 
-def notify_user(result, user_config):
-    """Send notifications to a user via their preferred channels"""
+def notify_user(result, user_config, bucket_name=None):
+    """Send notifications to a user via their preferred channels with state-based change detection"""
     notifications_sent = 0
     
-    # Determine if we should notify
-    should_notify = result.get('has_availabilities') or result.get('error')
-    if not should_notify:
+    # Always notify errors immediately
+    if result.get('error'):
+        return _send_error_notification(result, user_config)
+    
+    # For availability notifications, use state-based change detection
+    if not result.get('has_availabilities'):
+        # No availability - just update state without notifying
+        if bucket_name:
+            _update_search_state_if_needed(result, user_config, bucket_name)
         return 0
     
+    # Check if we should notify based on state changes
+    search_name = result.get('search_name', 'Unknown')
+    last_state = _get_search_last_state(result, user_config)
+    
+    should_notify, reason, new_state = should_notify_availability_change(result, last_state)
+    
+    # Update the state regardless of notification decision
+    if bucket_name:
+        user_id = user_config.get('_user_id')
+        if user_id:
+            update_search_availability_state(bucket_name, user_id, search_name, new_state)
+            print(f"🔄 Updated availability state for '{search_name}': {reason}")
+    
+    if not should_notify:
+        print(f"🔇 Skipping notification for '{search_name}': {reason}")
+        return 0
+    
+    # Proceed with notification - enhance message with reason
     try:
-        if result.get('error'):
-            # Error notification
-            message = f"🚨 Error checking '{result['search_name']}': {result['error']}"
-            title = "Search Error"
-            priority = 1
-        else:
-            # Format availability notification
-            message, title, priority = format_campsite_availability_message(
-                result['camping_output'],
-                result['has_availabilities'],
-                result['search_name']
-            )
+        message, title, priority = format_campsite_availability_message(
+            result['camping_output'],
+            result['has_availabilities'],
+            result['search_name']
+        )
         
         if not message:  # No message to send
             return 0
+            
+        # Enhance message based on the reason for notification
+        if reason == "first_availability_found":
+            message = f"🎉 NEW: First availability found!\n\n{message}"
+        elif reason == "new_availability":
+            message = f"🎉 NEW: Availability just appeared!\n\n{message}"
+        elif reason == "significant_increase":
+            site_count = new_state.get('site_count', 0)
+            message = f"📈 MORE SITES: Now {site_count} sites available!\n\n{message}"
         
         # Adjust priority based on search config
         if result.get('priority') == 'high':
@@ -255,10 +384,8 @@ def notify_user(result, user_config):
             user_id = user_config.get('_user_id')
             if user_id:
                 try:
-                    # Get bot token and format message for new function
                     bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
                     if bot_token:
-                        # Format title into message since new function doesn't have title parameter
                         if title and title != "Campsite Alert":
                             formatted_message = f"<b>{title}</b>\n\n{message}"
                         else:
@@ -268,9 +395,10 @@ def notify_user(result, user_config):
                     if telegram_result and telegram_result.get('ok'):
                         notifications_sent += 1
                         result['telegram_notification_sent'] = True
-                        print(f"Telegram notification sent to user {user_id}")
+                        result['notification_reason'] = reason
+                        print(f"✅ Sent notification to user {user_id}: {reason}")
                 except Exception as telegram_error:
-                    print(f"Failed to send Telegram notification to user {user_id}: {telegram_error}")
+                    print(f"❌ Failed to send Telegram notification to user {user_id}: {telegram_error}")
                     result['telegram_notification_error'] = str(telegram_error)
         
         # Send Pushover notification if enabled (legacy support)
@@ -281,17 +409,86 @@ def notify_user(result, user_config):
                     notifications_sent += 1
                     result['pushover_notification_sent'] = True
                     result['pushover_response'] = pushover_result
-                    print(f"Pushover notification sent")
+                    print(f"✅ Sent Pushover notification")
             except Exception as pushover_error:
-                print(f"Failed to send Pushover notification: {pushover_error}")
+                print(f"❌ Failed to send Pushover notification: {pushover_error}")
                 result['pushover_notification_error'] = str(pushover_error)
         
         return notifications_sent
         
     except Exception as notification_error:
-        print(f"Error in notify_user: {notification_error}")
+        print(f"❌ Error in notify_user: {notification_error}")
         result['notification_error'] = str(notification_error)
         return 0
+
+def _send_error_notification(result, user_config):
+    """Send error notifications immediately (no state checking needed)"""
+    message = f"🚨 Error checking '{result['search_name']}': {result['error']}"
+    title = "Search Error"
+    priority = 1
+    notifications_sent = 0
+    
+    notification_settings = user_config.get('notification_settings', {})
+    
+    # Send Telegram notification if enabled
+    if notification_settings.get('telegram_enabled', True):
+        user_id = user_config.get('_user_id')
+        if user_id:
+            try:
+                bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+                if bot_token:
+                    formatted_message = f"<b>{title}</b>\n\n{message}"
+                    telegram_result = send_telegram_notification(bot_token, user_id, formatted_message)
+                if telegram_result and telegram_result.get('ok'):
+                    notifications_sent += 1
+                    result['telegram_notification_sent'] = True
+                    print(f"✅ Sent error notification to user {user_id}")
+            except Exception as telegram_error:
+                print(f"❌ Failed to send Telegram error notification to user {user_id}: {telegram_error}")
+                result['telegram_notification_error'] = str(telegram_error)
+    
+    # Send Pushover notification if enabled (legacy support)
+    if notification_settings.get('pushover_enabled', False):
+        try:
+            pushover_result = send_pushover_notification(message, title, priority)
+            if pushover_result.get('status') == 1:
+                notifications_sent += 1
+                result['pushover_notification_sent'] = True
+                result['pushover_response'] = pushover_result
+        except Exception as pushover_error:
+            print(f"❌ Failed to send Pushover error notification: {pushover_error}")
+            result['pushover_notification_error'] = str(pushover_error)
+    
+    return notifications_sent
+
+def _get_search_last_state(result, user_config):
+    """Get the last availability state for a search"""
+    search_name = result.get('search_name', 'Unknown')
+    
+    for search in user_config.get('searches', []):
+        if search.get('name') == search_name:
+            return search.get('last_availability_state')
+    
+    return None
+
+def _update_search_state_if_needed(result, user_config, bucket_name):
+    """Update search state even when there's no availability"""
+    search_name = result.get('search_name', 'Unknown')
+    last_state = _get_search_last_state(result, user_config)
+    
+    # Create new state for no availability
+    new_state = {
+        'has_sites': False,
+        'site_count': 0,
+        'last_checked': datetime.now().isoformat()
+    }
+    
+    # Only update if state actually changed
+    if not last_state or last_state.get('has_sites', False):
+        user_id = user_config.get('_user_id')
+        if user_id:
+            update_search_availability_state(bucket_name, user_id, search_name, new_state)
+            print(f"🔄 Updated state for '{search_name}': availability_disappeared")
 
 def sanitize_for_telegram(text):
     """Sanitize text for safe Telegram sending"""
@@ -557,7 +754,7 @@ def campsite_checker_handler(event, context):
                         results.append(result)
                         
                         # Send notifications to this user
-                        user_notifications = notify_user(result, user_config)
+                        user_notifications = notify_user(result, user_config, bucket_name)
                         notifications_sent += user_notifications
         
         else:

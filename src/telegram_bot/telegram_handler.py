@@ -318,7 +318,8 @@ Please provide the park ID number.
             "nights": (end_dt - start_dt).days,
             "weekends_only": False,
             "priority": "normal",
-            "created_at": datetime.now().isoformat()
+            "created_at": datetime.now().isoformat(),
+            "last_availability_state": None  # Initialize state tracking for smart notifications
         }
         
         # Check for duplicate names (case-insensitive)

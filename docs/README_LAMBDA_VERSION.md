@@ -553,8 +553,8 @@ Manual check completed successfully
 ## 🔗 Related Files
 
 ### Lambda Functions
-- `src/campsite_checker/lambda_handler.py` - Main campsite monitoring Lambda
-- `src/telegram_bot/handler.py` - Telegram bot command processing Lambda
+- `src/campsite_checker/campsite_handler.py` - Main campsite monitoring Lambda
+- `src/telegram_bot/telegram_handler.py` - Telegram bot command processing Lambda
 - `deployment/campsite_checker.zip` - Deployable campsite checker package
 - `deployment/telegram_bot.zip` - Deployable telegram bot package
 

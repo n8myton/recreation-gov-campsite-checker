@@ -35,6 +35,11 @@
 - [ ] Add search analytics and success rate tracking
 - [ ] Create admin dashboard for system monitoring
 - [ ] Add comprehensive error tracking and alerts
+  - [ ] **Set up CloudWatch Alarms + SNS email notifications** (Option 1 - simplest, no code changes)
+    - Configure CloudWatch Alarms for Lambda errors/throttles
+    - Create SNS topic with email subscription for admin alerts
+    - Set up alarms for both `campbot` and `telegram_bot` Lambda functions
+    - Optional: CloudWatch Log Insights saved queries for common error patterns
 
 ## ⚡ **Performance & Scaling**
 - [ ] Conduct UAT with multiple concurrent searches
