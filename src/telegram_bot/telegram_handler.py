@@ -141,7 +141,7 @@ I'll help you monitor recreation.gov campsites and notify you when sites become 
 
 *Getting Started:*
 1. Use `/add` to create your first search
-2. I'll check every 30 minutes automatically
+2. I'll check every minute automatically
 3. You'll get notified here when sites are found!
 
 Let's find you some campsites! 🎉"""
@@ -341,7 +341,7 @@ Please provide the park ID number.
 🏕️ *Park:* {park_id}
 🔔 *Status:* Enabled
 
-I'll check this search every 30 minutes and notify you when sites become available! 🎉
+I'll check this search every minute and notify you when sites become available! 🎉
 
 Use `/list` to see all your searches."""
             

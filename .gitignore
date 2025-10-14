@@ -7,3 +7,35 @@ __pycache__
 *.swp
 *egg-info
 .env
+
+# Deployment artifacts
+deployment/*.zip
+*.zip
+
+# Build directories
+/build/
+/dist/
+/.eggs/
+
+# Python
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# IDE
+.vscode/
+.idea/
+*.sublime-*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Test coverage
+.coverage
+htmlcov/
+.pytest_cache/

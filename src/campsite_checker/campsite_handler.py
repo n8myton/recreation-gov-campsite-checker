@@ -659,7 +659,7 @@ def handle_manual_check(event, context):
         if availabilities_found > 0:
             summary = f"✅ <b>Manual Check Complete!</b>\n\n🎉 Found availability in {availabilities_found} of {len(enabled_searches)} searches!\n\nDetailed results were sent above. 🏕️"
         else:
-            summary = f"✅ <b>Manual Check Complete!</b>\n\n❌ No availability found in {len(enabled_searches)} search(es).\n\nI'll keep monitoring automatically every 30 minutes. 🔍"
+            summary = f"✅ <b>Manual Check Complete!</b>\n\n❌ No availability found in {len(enabled_searches)} search(es).\n\nI'll keep monitoring automatically every minute. 🔍"
         
         if errors > 0:
             summary += f"\n\n⚠️ {errors} search(es) had errors - check your search criteria."
