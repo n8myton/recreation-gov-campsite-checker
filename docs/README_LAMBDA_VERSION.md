@@ -145,35 +145,6 @@ Each Telegram user has their own configuration file stored in S3 at `users/teleg
 }
 ```
 
-### Legacy Single-User Configuration (Optional)
-
-For backward compatibility, the system still supports a global `campsite_searches.json` configuration file when running in legacy mode:
-
-```json
-{
-  "version": "1.0",
-  "description": "Campsite monitoring configuration",
-  "notification_settings": {
-    "only_notify_on_availability": true,
-    "include_search_name_in_notification": true
-  },
-  "searches": [
-    {
-      "name": "Yosemite Valley 4th of July Weekend",
-      "enabled": true,
-      "parks": ["232448"],
-      "start_date": "2025-07-04",
-      "end_date": "2025-07-06",
-      "campsite_type": null,
-      "campsite_ids": [],
-      "nights": 2,
-      "weekends_only": false,
-      "priority": "high"
-    }
-  ]
-}
-```
-
 ### Search Parameters
 
 | Field | Type | Required | Description |
@@ -227,12 +198,11 @@ When a new user starts using the bot:
 
 ## 📱 Notification System
 
-### Multi-User Telegram Notifications
+### Telegram Notifications
 
 The system **sends notifications via Telegram** to each user individually when:
 - ✅ Campsites become available matching their criteria
-- ❌ Errors occur during their search execution
-- 🚨 System failures affecting their monitoring
+- ❌ Errors occur during search execution
 
 **No notifications are sent** when no campsites are available (silent operation).
 
@@ -264,22 +234,15 @@ Detailed results were sent above. 🏕️
 Recreation.gov API temporarily unavailable
 ```
 
-### Legacy Pushover Support
-
-The system maintains backward compatibility with Pushover notifications for users who enable it in their notification settings.
-
 ## 🎛️ Lambda Event Structures
 
 ### Campsite Checker Lambda Events
 
-#### Scheduled Multi-User Monitoring (Normal)
+#### Scheduled Multi-User Monitoring
 ```json
-{
-  "multi_user_mode": true,
-  "config_bucket": "your-campbot-config-bucket"
-}
+{}
 ```
-*Processes all user configurations automatically*
+*EventBridge triggers with an empty payload. The Lambda uses the `CONFIG_BUCKET` environment variable to find user configurations.*
 
 #### Manual Check Request (from Telegram Bot)
 ```json
@@ -290,15 +253,7 @@ The system maintains backward compatibility with Pushover notifications for user
   "telegram_bot_token": "bot123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11"
 }
 ```
-
-#### Legacy Single-User Mode
-```json
-{
-  "multi_user_mode": false,
-  "config_bucket": "your-config-bucket",
-  "config_key": "campsite_searches.json"
-}
-```
+*Triggered by user `/check` command through Telegram Bot Lambda*
 
 ### Telegram Bot Lambda Events
 
@@ -386,74 +341,6 @@ The system maintains backward compatibility with Pushover notifications for user
 }
 ```
 
-## 🚨 Error Handling
-
-### Campsite Checker Lambda Errors
-#### Configuration Errors
-- **Missing user configs**: Continues processing other users, logs warning
-- **Invalid user JSON**: Skips user, logs error, continues with others
-- **Missing required search fields**: Skips invalid searches, continues with valid ones
-
-#### API Errors
-- **Recreation.gov timeout**: Retries once, then reports error to user via Telegram
-- **Invalid park ID**: Skips park, continues with other parks in search
-- **Rate limiting**: Waits and retries automatically
-
-#### System Errors
-- **Lambda timeout**: Partial results returned, remaining users skipped
-- **Memory limit**: Critical error notification sent to all affected users
-- **Network issues**: Error notification with details sent to affected users
-
-### Telegram Bot Lambda Errors
-#### User Command Errors
-- **Invalid date format**: Sends help message with correct format
-- **Unknown park**: Suggests using park ID or popular park names
-- **Duplicate search name**: Asks user to choose different name
-- **Missing required parameters**: Shows command usage examples
-
-#### System Errors
-- **S3 access denied**: Sends error message, logs for admin attention
-- **Campsite Checker Lambda unavailable**: Informs user to try again later
-- **Malformed webhook**: Logs error, returns 400
-
-### Multi-User Error Isolation
-
-**Isolated Failures**: Each user's processing is independent. If one user's configuration is corrupted or causes errors, it doesn't affect other users' campsite monitoring.
-
-**Graceful Degradation**: The system continues operating even if some users encounter errors, ensuring maximum availability for all users.
-
-## 📈 Performance & Limits
-
-### Execution Times
-#### Campsite Checker Lambda
-- **Single user check**: ~3-5 seconds  
-- **Multi-user monitoring (10 users)**: ~15-30 seconds
-- **Manual check request**: ~5-10 seconds
-- **Large user base (50+ users)**: ~60-120 seconds
-
-#### Telegram Bot Lambda
-- **Command processing**: ~0.5-2 seconds
-- **Configuration updates**: ~1-3 seconds
-- **Manual check trigger**: ~1 second (plus Campsite Checker execution time)
-
-### Recommended Limits
-#### Per-User Limits
-- **Max searches per user**: 10 searches
-- **Max parks per search**: 5 parks
-- **Date range**: Up to 30 days per search
-
-#### System Limits
-- **Total active users**: 100+ users supported
-- **Check frequency**: Every 15-30 minutes
-- **Campsite Checker timeout**: 300 seconds (5 minutes)
-- **Telegram Bot timeout**: 30 seconds
-- **Lambda memory**: 512 MB (Campsite Checker), 256 MB (Telegram Bot)
-
-### Scalability Considerations
-- **S3 storage**: Scales automatically with user count
-- **Lambda concurrency**: Configure based on user base size
-- **Cost optimization**: Inactive users (no searches) consume no processing resources
-
 ## 🔧 Configuration Management
 
 ### User Configuration Management (via Telegram)
@@ -472,20 +359,12 @@ The system maintains backward compatibility with Pushover notifications for user
 #### Campsite Checker Lambda
 - `CONFIG_BUCKET`: S3 bucket containing user configurations
 - `TELEGRAM_BOT_TOKEN`: Bot token for sending notifications
-- `PUSHOVER_USER_KEY`: (Optional) Legacy Pushover support
-- `PUSHOVER_API_TOKEN`: (Optional) Legacy Pushover support
 
 #### Telegram Bot Lambda  
 - `CONFIG_BUCKET`: S3 bucket for storing user configurations
 - `TELEGRAM_BOT_TOKEN`: Bot token for processing commands
 
 ### System Configuration Management
-
-#### User Configuration Storage
-- **Location**: S3 bucket under `users/telegram_{user_id}.json`
-- **Auto-creation**: New user configs created on first `/start` command
-- **Backup**: S3 versioning recommended for configuration backup
-- **Migration**: Existing single-user configs can be migrated to per-user format
 
 #### Schedule Management
 EventBridge rules control when Campsite Checker Lambda runs:
@@ -560,76 +439,3 @@ Manual check completed successfully
 2. **S3 errors**: Verify bucket permissions and region configuration
 3. **Telegram API errors**: Check bot token and webhook configuration
 4. **Recreation.gov API errors**: Check external service status
-
-## 💰 Cost Estimation
-
-### Multi-User System Costs (10 users, 30-minute checks)
-- **Campsite Checker Lambda**: ~$1.50/month (longer execution times)
-- **Telegram Bot Lambda**: ~$0.25/month (command processing)
-- **S3 storage**: ~$0.05/month (user configurations)
-- **EventBridge**: ~$0.10/month (scheduled triggers)
-- **API Gateway**: ~$0.10/month (Telegram webhook)
-- **Telegram**: Free (bot messaging)
-- **Total**: ~$2.00/month
-
-### Scaling Costs (50 users)
-- **Total estimated cost**: ~$6-8/month
-- **Cost per user**: ~$0.12-0.16/month
-
-### Legacy Single-User System (for comparison)
-- **Lambda executions**: ~$0.50/month
-- **S3 storage**: ~$0.01/month  
-- **EventBridge**: ~$0.10/month
-- **Pushover**: Free (500 notifications/month)
-- **Total**: ~$0.61/month
-
-## 🎯 Best Practices
-
-### User Management
-- 👥 **Educate users**: Provide clear examples of `/add` command usage
-- 👥 **Monitor usage**: Track active users and searches via CloudWatch
-- 👥 **Set expectations**: Explain automatic monitoring vs manual checks
-- 👥 **Limit searches**: Encourage users to focus on 3-5 high-priority searches
-
-### Search Strategy (for users)
-- ✅ **Specific dates**: Better than broad date ranges
-- ✅ **Popular parks**: Check more frequently during peak seasons
-- ✅ **Backup dates**: Include multiple viable date options
-- ✅ **Flexible criteria**: Don't over-constrain campsite types
-
-### System Configuration
-- 🔧 **Monitor timeouts**: Adjust Lambda timeout based on user count
-- 🔧 **S3 versioning**: Enable versioning for user configuration backup
-- 🔧 **CloudWatch alarms**: Set up alerts for high error rates
-- 🔧 **Cost monitoring**: Track Lambda execution costs as user base grows
-
-### Telegram Bot Management
-- 🤖 **Clear commands**: Provide helpful error messages with examples
-- 🤖 **Input validation**: Validate dates and park IDs before saving
-- 🤖 **User feedback**: Confirm successful operations with clear messages
-- 🤖 **Error handling**: Gracefully handle malformed commands
-
-### Monitoring Tips
-- 📊 **Check CloudWatch logs** for both Lambda functions weekly
-- 📊 **Monitor user activity** and search success rates
-- 📊 **Track notification delivery** to identify issues
-- 📊 **Review error patterns** to improve system reliability
-- 📊 **Update user searches** as trip dates approach
-
-## 🔗 Related Files
-
-### Lambda Functions
-- `src/campsite_checker/campsite_handler.py` - Main campsite monitoring Lambda
-- `src/telegram_bot/telegram_handler.py` - Telegram bot command processing Lambda
-- `deployment/campsite_checker.zip` - Deployable campsite checker package
-- `deployment/telegram_bot.zip` - Deployable telegram bot package
-
-### Documentation  
-- `docs/DEPLOYMENT_GUIDE.md` - AWS deployment instructions for both Lambdas
-- `docs/TELEGRAM_BOT_SETUP.md` - Telegram bot configuration guide
-- `docs/LOCAL_TESTING.md` - Local development and testing guide
-- `docs/FUTURE_ROADMAP.md` - Planned enhancements and features
-
-### Configuration Templates
-- `config/legacy_searches.json` - Example legacy configuration format
-- User configurations are stored dynamically in S3 as `users/telegram_{user_id}.json`

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Multi-user Production Lambda function for scheduled campsite monitoring.
-Loads search configurations from S3 for all users and checks multiple campsite/date combinations.
-Supports both legacy single-user mode and new multi-user Telegram bot mode.
+Multi-user Lambda function for scheduled campsite monitoring.
+Loads per-user search configurations from S3 and checks multiple campsite/date combinations.
+Sends notifications via Telegram when availability is found.
 """
 
 import json
@@ -29,51 +29,6 @@ try:
 except ImportError:
     CAMPING_AVAILABLE = False
     print("Warning: camping module not available")
-
-def send_pushover_notification(message, title="Campsite Alert", priority=0):
-    """Send a notification via Pushover"""
-    user_key = os.environ.get('PUSHOVER_USER_KEY')
-    api_token = os.environ.get('PUSHOVER_API_TOKEN')
-    
-    if not user_key or not api_token:
-        raise ValueError("PUSHOVER_USER_KEY and PUSHOVER_API_TOKEN environment variables must be set")
-
-    data = urllib.parse.urlencode({
-        "token": api_token,
-        "user": user_key,
-        "message": message,
-        "title": title,
-        "priority": priority
-    }).encode()
-
-    req = urllib.request.Request("https://api.pushover.net/1/messages.json", data=data)
-    with urllib.request.urlopen(req) as response:
-        result = response.read().decode()
-    
-    return json.loads(result)
-
-def load_search_config(bucket_name=None, config_key="campsite_searches.json"):
-    """
-    Load search configuration from S3 or local file (legacy single-user mode)
-    """
-    if bucket_name:
-        # Load from S3 (production)
-        s3 = boto3.client('s3')
-        try:
-            response = s3.get_object(Bucket=bucket_name, Key=config_key)
-            config_content = response['Body'].read().decode('utf-8')
-            return json.loads(config_content)
-        except Exception as e:
-            print(f"Error loading config from S3: {e}")
-            return None
-    else:
-        # Load from local file (testing)
-        try:
-            with open(config_key, 'r') as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"Error loading local config: {e}")
-            return None
 
 def load_user_config(bucket_name, user_id):
     """Load user-specific search configuration from S3"""
@@ -133,7 +88,7 @@ def get_all_user_configs(bucket_name):
         print(f"Error loading all user configs: {e}")
         return []
 
-def format_campsite_availability_message(camping_output, has_availabilities, search_name=None):
+def format_campsite_availability_message(camping_output, has_availabilities, search_name=None, park_ids=None):
     """
     Format camping availability results into a nice notification message
     """
@@ -175,7 +130,14 @@ def format_campsite_availability_message(camping_output, has_availabilities, sea
             message = f"🎉 {first_line} 🏕🏕🏕\n\n"
         
         message += "\n".join(available_site_strings)
-        message += f"\n\n🏕 Book now! 🏕"
+        
+        # Add booking links for each park
+        if park_ids:
+            message += "\n\n📅 Book now:\n"
+            for park_id in park_ids:
+                message += f"https://www.recreation.gov/camping/campgrounds/{park_id}\n"
+        else:
+            message += f"\n\n🏕 Book now! 🏕"
         
         title = f"🏕 CAMPSITES FOUND!"
         if search_name:
@@ -325,9 +287,14 @@ def notify_user(result, user_config, bucket_name=None):
     """Send notifications to a user via their preferred channels with state-based change detection"""
     notifications_sent = 0
     
-    # Always notify errors immediately
+    # Check for errors - only notify for important ones (not transient API issues)
     if result.get('error'):
-        return _send_error_notification(result, user_config)
+        if _should_notify_error(result.get('error')):
+            return _send_error_notification(result, user_config)
+        else:
+            # Transient error (429, timeout, etc.) - log but don't notify
+            print(f"⚠️ Transient error for '{result.get('search_name')}': {result.get('error')} (not notifying user)")
+            return 0
     
     # For availability notifications, use state-based change detection
     if not result.get('has_availabilities'):
@@ -358,7 +325,8 @@ def notify_user(result, user_config, bucket_name=None):
         message, title, priority = format_campsite_availability_message(
             result['camping_output'],
             result['has_availabilities'],
-            result['search_name']
+            result['search_name'],
+            result.get('parks')
         )
         
         if not message:  # No message to send
@@ -401,25 +369,43 @@ def notify_user(result, user_config, bucket_name=None):
                     print(f"❌ Failed to send Telegram notification to user {user_id}: {telegram_error}")
                     result['telegram_notification_error'] = str(telegram_error)
         
-        # Send Pushover notification if enabled (legacy support)
-        if notification_settings.get('pushover_enabled', False):
-            try:
-                pushover_result = send_pushover_notification(message, title, priority)
-                if pushover_result.get('status') == 1:
-                    notifications_sent += 1
-                    result['pushover_notification_sent'] = True
-                    result['pushover_response'] = pushover_result
-                    print(f"✅ Sent Pushover notification")
-            except Exception as pushover_error:
-                print(f"❌ Failed to send Pushover notification: {pushover_error}")
-                result['pushover_notification_error'] = str(pushover_error)
-        
         return notifications_sent
         
     except Exception as notification_error:
         print(f"❌ Error in notify_user: {notification_error}")
         result['notification_error'] = str(notification_error)
         return 0
+
+def _should_notify_error(error_message):
+    """
+    Determine if an error should trigger a user notification.
+    Returns False for transient errors (rate limiting, timeouts).
+    Returns True for important errors (config issues, persistent failures).
+    """
+    error_lower = str(error_message).lower()
+    
+    # Transient errors that shouldn't notify users
+    transient_indicators = [
+        '429',  # Rate limiting
+        'rate limit',
+        'too many requests',
+        'timeout',
+        'timed out',
+        'connection',
+        'network',
+        'temporarily unavailable',
+        'service unavailable',
+        '503',  # Service unavailable
+        '502',  # Bad gateway
+        '504',  # Gateway timeout
+    ]
+    
+    for indicator in transient_indicators:
+        if indicator in error_lower:
+            return False
+    
+    # All other errors should notify (config issues, invalid park IDs, etc.)
+    return True
 
 def _send_error_notification(result, user_config):
     """Send error notifications immediately (no state checking needed)"""
@@ -446,18 +432,6 @@ def _send_error_notification(result, user_config):
             except Exception as telegram_error:
                 print(f"❌ Failed to send Telegram error notification to user {user_id}: {telegram_error}")
                 result['telegram_notification_error'] = str(telegram_error)
-    
-    # Send Pushover notification if enabled (legacy support)
-    if notification_settings.get('pushover_enabled', False):
-        try:
-            pushover_result = send_pushover_notification(message, title, priority)
-            if pushover_result.get('status') == 1:
-                notifications_sent += 1
-                result['pushover_notification_sent'] = True
-                result['pushover_response'] = pushover_result
-        except Exception as pushover_error:
-            print(f"❌ Failed to send Pushover error notification: {pushover_error}")
-            result['pushover_notification_error'] = str(pushover_error)
     
     return notifications_sent
 
@@ -629,8 +603,17 @@ def handle_manual_check(event, context):
                     # Sanitize the camping output for safe Telegram sending
                     safe_output = sanitize_for_telegram(result.get('camping_output', 'Availability found but no details available'))
                     
-                    # Format the message for Telegram using HTML
-                    message = f"🎉 <b>FOUND: {search_name}</b>\n\n{safe_output}\n\n🏕 Book now! 🏕"
+                    # Build message with booking links
+                    message = f"🎉 <b>FOUND: {search_name}</b>\n\n{safe_output}\n\n"
+                    
+                    # Add booking links for each park
+                    park_ids = result.get('parks', [])
+                    if park_ids:
+                        message += "📅 <b>Book now:</b>\n"
+                        for park_id in park_ids:
+                            message += f"https://www.recreation.gov/camping/campgrounds/{park_id}\n"
+                    else:
+                        message += "🏕 Book now! 🏕"
                     
                     print(f"🔍 DEBUG: Sending message with length: {len(message)}")
                     print(f"🔍 DEBUG: First 200 chars: {message[:200]}...")
@@ -638,9 +621,13 @@ def handle_manual_check(event, context):
                     send_telegram_notification(bot_token, chat_id, message)
                     print(f"✅ Sent availability notification for {search_name}")
                 elif result.get('error') and bot_token and chat_id:
-                    error_message = f"⚠️ <b>Error in search: {search_name}</b>\n\n{result['error']}\n\nPlease check your search criteria."
-                    send_telegram_notification(bot_token, chat_id, error_message)
-                    print(f"❌ Sent error notification for {search_name}")
+                    # Only notify for important errors (not transient API issues)
+                    if _should_notify_error(result['error']):
+                        error_message = f"⚠️ <b>Error in search: {search_name}</b>\n\n{result['error']}\n\nPlease check your search criteria."
+                        send_telegram_notification(bot_token, chat_id, error_message)
+                        print(f"❌ Sent error notification for {search_name}")
+                    else:
+                        print(f"⚠️ Transient error for {search_name} (not notifying): {result['error']}")
                 
                 results.append(result)
                 
@@ -701,15 +688,20 @@ def campsite_checker_handler(event, context):
             print(f"🔍 Processing manual check request for user {event['user_id']}")
             return handle_manual_check(event, context)
         
-        # Original scheduled monitoring logic
-        # Get configuration from event or environment
-        bucket_name = event.get('config_bucket') or os.environ.get('CONFIG_BUCKET')
-        config_key = event.get('config_key', 'campsite_searches.json')
-        multi_user_mode = event.get('multi_user_mode', True)  # Default to multi-user
+        # Scheduled monitoring logic - multi-user mode
+        bucket_name = os.environ.get('CONFIG_BUCKET')
+        
+        if not bucket_name:
+            error_msg = "CONFIG_BUCKET environment variable not set"
+            print(f"❌ {error_msg}")
+            return {
+                "statusCode": 500,
+                "body": json.dumps({"error": error_msg})
+            }
         
         if not CAMPING_AVAILABLE:
             error_msg = "Camping module not available"
-            send_pushover_notification(f"🚨 {error_msg}", "Module Error", 1)
+            print(f"❌ {error_msg}")
             return {
                 "statusCode": 500,
                 "body": json.dumps({"error": error_msg})
@@ -719,125 +711,65 @@ def campsite_checker_handler(event, context):
         notifications_sent = 0
         total_searches = 0
         
-        if multi_user_mode:
-            # Multi-user mode: load all user configurations
-            print("Running in multi-user mode")
-            user_configs = get_all_user_configs(bucket_name)
-            
-            if not user_configs:
-                print("No user configurations found")
-                return {
-                    "statusCode": 200,
-                    "body": json.dumps({
-                        "message": "No users with active searches",
-                        "total_searches": 0,
-                        "availabilities_found": 0,
-                        "notifications_sent": 0,
-                        "users_processed": 0
-                    })
-                }
-            
-            for user_config in user_configs:
-                user_id = user_config.get('_user_id', 'unknown')
-                user_searches = user_config.get('searches', [])
-                print(f"Processing {len(user_searches)} searches for user {user_id}")
-                
-                for search_config in user_searches:
-                    if not search_config.get('enabled', True):
-                        continue
-                    
-                    total_searches += 1
-                    result = process_search(search_config)
-                    if result:
-                        # Add user context to result
-                        result['user_id'] = user_id
-                        results.append(result)
-                        
-                        # Send notifications to this user
-                        user_notifications = notify_user(result, user_config, bucket_name)
-                        notifications_sent += user_notifications
+        # Load all user configurations
+        print("Running multi-user campsite monitoring")
+        user_configs = get_all_user_configs(bucket_name)
         
-        else:
-            # Legacy single-user mode
-            print("Running in legacy single-user mode")
-            config = load_search_config(bucket_name, config_key)
-            if not config:
-                error_msg = "Failed to load search configuration"
-                send_pushover_notification(f"🚨 {error_msg}", "Configuration Error", 1)
-                return {
-                    "statusCode": 500,
-                    "body": json.dumps({"error": error_msg})
-                }
+        if not user_configs:
+            print("No user configurations found")
+            return {
+                "statusCode": 200,
+                "body": json.dumps({
+                    "message": "No users with active searches",
+                    "total_searches": 0,
+                    "availabilities_found": 0,
+                    "notifications_sent": 0,
+                    "users_processed": 0
+                })
+            }
+        
+        for user_config in user_configs:
+            user_id = user_config.get('_user_id', 'unknown')
+            user_searches = user_config.get('searches', [])
+            print(f"Processing {len(user_searches)} searches for user {user_id}")
             
-            # Process searches in legacy format
-            for search_config in config['searches']:
+            for search_config in user_searches:
                 if not search_config.get('enabled', True):
                     continue
-                    
+                
                 total_searches += 1
                 result = process_search(search_config)
                 if result:
+                    # Add user context to result
+                    result['user_id'] = user_id
                     results.append(result)
                     
-                    # Legacy notification handling
-                    if result.get('has_availabilities') or result.get('error'):
-                        try:
-                            if result.get('error'):
-                                message = f"🚨 Error checking '{result['search_name']}': {result['error']}"
-                                title = "Search Error"
-                                priority = 1
-                            else:
-                                message, title, priority = format_campsite_availability_message(
-                                    result['camping_output'],
-                                    result['has_availabilities'],
-                                    result['search_name']
-                                )
-                            
-                            if message:
-                                if result.get('priority') == 'high':
-                                    priority = max(priority, 1)
-                                
-                                pushover_result = send_pushover_notification(message, title, priority)
-                                result['notification_sent'] = True
-                                result['pushover_response'] = pushover_result
-                                notifications_sent += 1
-                                print(f"Notification sent for: {result['search_name']}")
-                            
-                        except Exception as notification_error:
-                            print(f"Failed to send notification for {result['search_name']}: {notification_error}")
-                            result['notification_error'] = str(notification_error)
+                    # Send notifications to this user
+                    user_notifications = notify_user(result, user_config, bucket_name)
+                    notifications_sent += user_notifications
         
         # Summary
         availabilities_found = len([r for r in results if r.get('has_availabilities')])
-        users_processed = len(set(r.get('user_id') for r in results if r.get('user_id'))) if multi_user_mode else 1
+        users_processed = len(set(r.get('user_id') for r in results if r.get('user_id')))
         
         print(f"Processed {total_searches} searches across {users_processed} users, found availability in {availabilities_found}, sent {notifications_sent} notifications")
         
-        response_body = {
-            "message": "Campsite monitoring completed",
-            "total_searches": total_searches,
-            "availabilities_found": availabilities_found,
-            "notifications_sent": notifications_sent,
-            "results": results
-        }
-        
-        if multi_user_mode:
-            response_body["users_processed"] = users_processed
-            response_body["mode"] = "multi-user"
-        else:
-            response_body["mode"] = "legacy"
-        
         return {
             "statusCode": 200,
-            "body": json.dumps(response_body)
+            "body": json.dumps({
+                "message": "Campsite monitoring completed",
+                "mode": "multi-user",
+                "total_searches": total_searches,
+                "availabilities_found": availabilities_found,
+                "notifications_sent": notifications_sent,
+                "users_processed": users_processed,
+                "results": results
+            })
         }
         
     except Exception as e:
         error_msg = f"Lambda execution failed: {str(e)}"
-        try:
-            send_pushover_notification(f"🚨 {error_msg}", "Lambda Error", 1)
-        except:
-            pass  # Don't fail on notification error
+        print(f"❌ {error_msg}")
         
         return {
             "statusCode": 500,

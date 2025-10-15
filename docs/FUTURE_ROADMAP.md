@@ -1,34 +1,32 @@
 # 🏕️ CampBot Future Roadmap
 
+## 🎉 **Recently Completed**
+- [x] ~~Fix search names with multiple words parsing issues~~ **COMPLETED ✅**
+- [x] ~~Handle recreation.gov API rate limits gracefully~~ **COMPLETED ✅** - Smart error filtering for 429s, timeouts, and transient errors
+- [x] ~~Add direct booking URLs to availability notifications~~ **COMPLETED ✅** - Links now included in all notifications
+- [x] ~~Add custom bot profile picture and description~~ **COMPLETED ✅**
+- [x] ~~Remove legacy single-user mode and Pushover support~~ **COMPLETED ✅** - Streamlined to multi-user Telegram only
+- [x] ~~Simplify EventBridge payload requirements~~ **COMPLETED ✅** - Now uses environment variables only
+
 ## 🐛 **Bug Fixes & Core Issues**
-- [x] ~~Fix search names with multiple words parsing issues. currently, when the user given name for a search has two+ words, it does not parse correctly, and confuses the 2nd word with the start of the date.~~ **COMPLETED ✅**
 - [ ] Improve date formatting for better user readability  
-- [ ] Handle recreation.gov API rate limits gracefully
-- [ ] Fix edge cases with date range validation
-- [ ] Improve error messages for invalid park IDs
+- [ ] Fix edge cases with date range validation (if needed)
+- [ ] Improve error messages for invalid park IDs (if needed)
 
 ## 🎨 **User Experience Improvements**
 - [ ] Add date picker/calendar interface for easier date selection
 - [ ] Replace command-line interface with inline keyboard UI in Telegram
-- [ ] Implement user onboarding flow with interactive tutorial
-- [ ] Create user settings and preferences system
-- [ ] Add support for campsite type preferences (RV, tent, etc.)
+- [ ] Add support for campsite type preferences (RV, tent, etc.) filtering
+- [ ] Add `/lookup` command - search park names and get park IDs from recreation.gov
 
 ## 🔔 **Notification Management**
 - [ ] Implement auto-pause notifications after booking window closes
 - [ ] Add pause/resume all notifications function
-- [ ] Add configurable search frequency/priority levels
-- [ ] Create smart notification scheduling (avoid night spam)
-- [ ] Add "snooze" functionality for temporary notification pause
-
-## 📚 **Documentation & Onboarding**
-- [ ] Create comprehensive user guide for getting started with campbot
-- [ ] Revise language and tone to match personal communication style
+- [ ] Add notification preferences (time windows, max per day, etc.)
 
 ## 🎯 **Branding & Polish**
 - [ ] Design and add logo/branding to bot and notifications
-- [ ] Create consistent visual identity
-- [ ] Add custom bot profile picture and description
+- [ ] Revise language and tone to match personal communication style
 
 ## 🔧 **System Reliability**
 - [ ] Implement bug report function for users
@@ -41,22 +39,10 @@
     - Set up alarms for both `campbot` and `telegram_bot` Lambda functions
     - Optional: CloudWatch Log Insights saved queries for common error patterns
 
-## ⚡ **Performance & Scaling**
-- [ ] Conduct UAT with multiple concurrent searches
-- [ ] Perform stress testing and assess cost implications  
-- [ ] Add search result caching to reduce API calls. Or maybe if multiple users are checking the same campground for same dates, we should only hit the api once for that date
-- [ ] Optimize Lambda cold start times
-
-## 💰 **Business Features**
-- [ ] Research and implement monetization strategy
-- [ ] Add usage analytics for pricing tiers
-- [ ] Create premium features (faster checks, priority support)
-
 ## 🗺️ **Enhanced Features**
-- [ ] Add direct booking URLs to availability notifications
-- [ ] Create database of known park IDs with names/locations
-- [ ] Add integration with other camping platforms beyond recreation.gov
-- [ ] Add support for recreation.gov wilderness permits (priority)
+- [ ] Add support for recreation.gov wilderness permits (high priority)
+- [ ] Support for tour/activity reservations
+- [ ] Multi-park search optimization (batch API calls)
 
 ---
 
