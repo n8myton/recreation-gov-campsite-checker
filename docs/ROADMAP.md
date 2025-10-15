@@ -4,16 +4,36 @@
 
 ---
 
+## 🎉 **Recently Completed**
+
+- [x] ~~**Add direct booking URLs to availability notifications**~~ ✅ **DONE**
+  - Links now included in all availability notifications
+  - Format: `https://www.recreation.gov/camping/campgrounds/{park_id}`
+  
+- [x] ~~**Handle recreation.gov API rate limits gracefully**~~ ✅ **DONE**
+  - Smart error filtering for 429s, timeouts, and transient errors
+  - No more spam notifications for temporary API issues
+  
+- [x] ~~**Fix search names with multiple words parsing issues**~~ ✅ **DONE**
+  - Supports both quoted and unquoted search names
+
+- [x] ~~**Remove legacy single-user mode and Pushover support**~~ ✅ **DONE**
+  - Streamlined codebase to multi-user Telegram only
+  - Removed ~200 lines of unused code
+  
+- [x] ~~**Simplify EventBridge payload requirements**~~ ✅ **DONE**
+  - Now uses environment variables only
+  - Empty `{}` payload works perfectly
+
+- [x] ~~**Add custom bot profile picture and description**~~ ✅ **DONE**
+
+---
+
 ## 🎯 **Phase 1: Core UX Polish** (Do These Next)
 
 These directly improve your camping experience and fix actual pain points:
 
 ### **High Priority** 🔥
-- [ ] **Add direct booking URLs to availability notifications**
-  - Most impactful: Click notification → Go straight to booking page
-  - Implementation: Just append `recreation.gov/camping/campsites/XXXXX` to messages
-  - Effort: 15 minutes
-
 - [ ] **Improve error messages for invalid park IDs**
   - Current: Generic error
   - Better: "Park 999999 not found. Double-check the recreation.gov URL."
@@ -24,6 +44,21 @@ These directly improve your camping experience and fix actual pain points:
   - Better: "July 4-6, 2025 (Fri-Sun)"
   - Makes it easier to scan notifications
   - Effort: 1 hour
+  
+- [ ] **Add `/lookup` command - search park names**
+  - Type park name → Bot searches and suggests park IDs
+  - Makes adding searches much easier
+  - Effort: 2-3 hours
+
+## **Wilderness Permits**
+
+- [ ] **Add support for recreation.gov wilderness permits**
+  - This is marked as priority in original roadmap
+  - Different API/flow than campgrounds
+  - Do this when: You actually plan a wilderness trip
+  - Effort: 4-6 hours (unknown API structure)
+
+**Decision:** Research this when you need it, not before.
 
 ### **Medium Priority** ⚡
 - [ ] **Smart notification scheduling (avoid night spam)**
@@ -54,11 +89,6 @@ Only do these when you actually encounter the problem:
   - AWS console setup, no code changes
   - Effort: 15 minutes
 
-- [ ] **Handle recreation.gov API rate limits gracefully**
-  - Do this when: You actually hit rate limits (unlikely at 1 user)
-  - Add exponential backoff and retries
-  - Effort: 2 hours
-
 - [ ] **Fix edge cases with date range validation**
   - Do this when: You find specific bugs in the wild
   - Don't preemptively fix problems that don't exist
@@ -75,10 +105,6 @@ Fun features when you're bored, not blocking anything:
   - Makes `/list` output much nicer
   - Could scrape recreation.gov or maintain small JSON
   - Effort: 3-4 hours
-
-- [ ] **Add custom bot branding (profile pic, description)**
-  - Make it feel more polished
-  - Effort: 1 hour
 
 - [ ] **Pause/resume commands**
   - `/pause` - temporarily stop all checks
@@ -138,10 +164,13 @@ What you've already built is actually really solid:
 - ✅ Manual check functionality
 - ✅ Clean, scalable architecture
 - ✅ Smart notification logic (state-based change detection)
+- ✅ Intelligent error filtering (no spam for transient errors)
+- ✅ Direct booking links in notifications
 - ✅ Robust error handling and logging
 - ✅ Support for multiple parks per search
 - ✅ Weekend-only and nights filtering
 - ✅ Multiple users can use it
+- ✅ Streamlined multi-user only codebase
 
 **You're not in MVP anymore - you're in "Actually Works Great" territory!** 🎉
 
@@ -151,26 +180,17 @@ What you've already built is actually really solid:
 
 If you have 1-2 hours and want to make the bot better, do these in order:
 
-1. **Add booking URLs** (15 min) - Highest impact
+1. ~~**Add booking URLs** (15 min)~~ ✅ **DONE**
 2. **Better error messages** (30 min) - Reduces user confusion  
 3. **Improve date formatting** (1 hour) - Nicer notifications
 4. **Set up CloudWatch alarm** (15 min) - Peace of mind
+5. **Add `/lookup` command** (2-3 hours) - Easier park discovery
 
 Everything else can wait until you actually need it.
 
 ---
 
-## 🎯 **High Priority Feature: Wilderness Permits**
 
-One feature worth calling out separately:
-
-- [ ] **Add support for recreation.gov wilderness permits**
-  - This is marked as priority in original roadmap
-  - Different API/flow than campgrounds
-  - Do this when: You actually plan a wilderness trip
-  - Effort: 4-6 hours (unknown API structure)
-
-**Decision:** Research this when you need it, not before.
 
 ---
 
